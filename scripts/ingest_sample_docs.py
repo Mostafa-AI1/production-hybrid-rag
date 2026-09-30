@@ -244,7 +244,7 @@ def main() -> None:
 
     print(f"\n[OK] Ingestion complete! Total chunks indexed: {total_chunks}")
     print("\nNow try a query:")
-    print("  curl -X POST http://localhost:8000/api/v1/query \\")
+    print("  curl -X POST http://localhost:8080/api/v1/query \\")
     print('    -H "Content-Type: application/json" \\')
     print('    -d \'{"query": "What is a Python decorator?"}\'')
 

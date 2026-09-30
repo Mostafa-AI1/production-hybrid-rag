@@ -105,7 +105,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      - "8080:8080"
     env_file:
       - ../.env                      # load all env vars from .env file
     environment:

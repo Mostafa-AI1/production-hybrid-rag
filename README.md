@@ -237,12 +237,12 @@ uv run python scripts/ingest_sample_docs.py
 ### 5. Run Application Server
 
 ```bash
-uv run uvicorn rag.api.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn rag.api.main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-- **Interactive Studio UI**: `http://localhost:8000/` or `http://localhost:8000/ui`
-- **OpenAPI Documentation**: `http://localhost:8000/docs`
-- **Readiness Probe**: `http://localhost:8000/health/ready`
+- **Interactive Studio UI**: `http://localhost:8080/` or `http://localhost:8080/ui`
+- **OpenAPI Documentation**: `http://localhost:8080/docs`
+- **Readiness Probe**: `http://localhost:8080/health/ready`
 
 ---
 
@@ -360,7 +360,7 @@ The included `docker/Dockerfile` utilizes a two-stage build separating dependenc
 
 ```bash
 docker build -t production-rag:latest -f docker/Dockerfile .
-docker run -p 8000:8000 --env-file .env production-rag:latest
+docker run -p 8080:8080 --env-file .env production-rag:latest
 ```
 
 ### Security Configurations
