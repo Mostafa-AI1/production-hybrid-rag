@@ -1,0 +1,26 @@
+# pre-commit hooks — run automatically before every git commit
+# Install with: pip install pre-commit && pre-commit install
+#
+# Why pre-commit?
+#   Catches issues before they reach CI, making code reviews cleaner.
+#   Each hook runs only on changed files, so it's fast.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace      # removes invisible trailing spaces
+      - id: end-of-file-fixer        # ensures files end with a newline
+      - id: check-yaml               # validates YAML syntax
+      - id: check-toml               # validates TOML syntax (pyproject.toml)
+      - id: check-added-large-files  # prevents accidentally committing model weights
+        args: ["--maxkb=1000"]
+      - id: detect-private-key       # catches accidentally committed secrets
+      - id: check-merge-conflict     # catches unresolved merge markers
+
+  # Ruff: linting + import sorting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.0
+    hooks:
+      - id: ruff
+        args: [--fix]               # auto-fix safe issues
+      - id: ruff-format             # format code (replaces black)

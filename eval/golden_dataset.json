@@ -1,0 +1,32 @@
+[
+  {
+    "question": "What is a Python decorator?",
+    "ground_truth_answer": "A Python decorator is a function that takes another function as input, adds some behaviour, and returns a new function. They use the @ syntax to wrap functions.",
+    "relevant_source": "python_decorators.md",
+    "category": "concepts"
+  },
+  {
+    "question": "How do I preserve function metadata when writing a decorator?",
+    "ground_truth_answer": "Use @functools.wraps(func) inside the wrapper function to preserve the original function's metadata such as its name and docstring.",
+    "relevant_source": "python_decorators.md",
+    "category": "best_practices"
+  },
+  {
+    "question": "What are *args and **kwargs in Python?",
+    "ground_truth_answer": "*args allows a function to accept a variable number of positional arguments, and **kwargs allows a variable number of keyword arguments.",
+    "relevant_source": "python_functions.md",
+    "category": "concepts"
+  },
+  {
+    "question": "What is the purpose of using a context manager in Python?",
+    "ground_truth_answer": "Context managers manage resources automatically, ensuring cleanup (such as closing files) even when exceptions occur, using the with statement.",
+    "relevant_source": "python_context_managers.md",
+    "category": "concepts"
+  },
+  {
+    "question": "How do you create a context manager using contextlib?",
+    "ground_truth_answer": "Use the @contextmanager decorator from contextlib and write a generator function with a yield statement. Code before yield runs on entry; code after yield (in finally) runs on exit.",
+    "relevant_source": "python_context_managers.md",
+    "category": "implementation"
+  }
+]

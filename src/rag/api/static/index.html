@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Production RAG Studio — Hybrid Retrieval & Observability</title>
+  <meta name="description" content="Production-grade RAG system with BGE-M3 hybrid search, cross-encoder reranking, semantic caching, and full observability.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #080B11;
+      --bg-secondary: #0F1420;
+      --bg-tertiary: #161D2E;
+      --bg-card: rgba(22, 29, 46, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-hover: rgba(99, 102, 241, 0.4);
+      --accent-cyan: #06B6D4;
+      --accent-blue: #3B82F6;
+      --accent-indigo: #6366F1;
+      --accent-purple: #8B5CF6;
+      --accent-emerald: #10B981;
+      --accent-amber: #F59E0B;
+      --text-primary: #F8FAFC;
+      --text-secondary: #94A3B8;
+      --text-muted: #64748B;
+      --glass-blur: blur(16px);
+      --glow-cyan: 0 0 24px rgba(6, 182, 212, 0.25);
+      --glow-indigo: 0 0 24px rgba(99, 102, 241, 0.25);
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-primary);
+      color: var(--text-primary);
+      font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 85% 85%, rgba(6, 182, 212, 0.10) 0%, transparent 45%);
+    }
+
+    /* Top Navigation Bar */
+    header {
+      height: 64px;
+      border-bottom: 1px solid var(--border-color);
+      background: rgba(8, 11, 17, 0.8);
+      backdrop-filter: var(--glass-blur);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 28px;
+      z-index: 50;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: var(--radius-sm);
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: var(--glow-cyan);
+    }
+
+    .brand-title {
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: -0.02em;
+      background: linear-gradient(to right, #FFF, var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .brand-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      background: rgba(99, 102, 241, 0.15);
+      color: var(--accent-indigo);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-weight: 600;
+    }
+
+    .header-controls {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      padding: 4px 12px;
+      border-radius: var(--radius-sm);
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+    }
+
+    .toggle-switch {
+      position: relative;
+      display: inline-block;
+      width: 34px;
+      height: 18px;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: var(--bg-tertiary);
+      transition: var(--transition);
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: var(--transition);
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: var(--accent-indigo);
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(16px);
+    }
+
+    .system-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      color: var(--accent-emerald);
+      background: rgba(16, 185, 129, 0.08);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .status-pulse {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+      box-shadow: 0 0 10px var(--accent-emerald);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 0.5; transform: scale(0.9); }
+      50% { opacity: 1; transform: scale(1.1); }
+      100% { opacity: 0.5; transform: scale(0.9); }
+    }
+
+    /* Main Workspace */
+    .workspace {
+      display: flex;
+      flex: 1;
+      height: calc(100vh - 64px);
+      overflow: hidden;
+    }
+
+    /* Chat Section */
+    .chat-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--bg-tertiary) transparent;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-width: 800px;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .message.user {
+      align-self: flex-end;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      width: 100%;
+    }
+
+    .message-bubble {
+      padding: 18px 24px;
+      border-radius: var(--radius-md);
+      font-size: 0.96rem;
+      line-height: 1.6;
+    }
+
+    .message.user .message-bubble {
+      background: linear-gradient(135deg, #4F46E5, #3B82F6);
+      color: white;
+      border-bottom-right-radius: 4px;
+      box-shadow: 0 8px 24px rgba(79, 70, 229, 0.25);
+    }
+
+    .message.assistant .message-bubble {
+      background: var(--bg-card);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      border-bottom-left-radius: 4px;
+      color: var(--text-primary);
+    }
+
+    .message-meta {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      padding: 0 4px;
+    }
+
+    .meta-tag {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      padding: 2px 8px;
+      border-radius: 4px;
+      color: var(--text-secondary);
+    }
+
+    .meta-tag.cache-hit {
+      background: rgba(16, 185, 129, 0.12);
+      border-color: rgba(16, 185, 129, 0.3);
+      color: var(--accent-emerald);
+    }
+
+    /* Welcome Hero */
+    .hero-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      text-align: center;
+      gap: 20px;
+      max-width: 640px;
+      margin: auto;
+    }
+
+    .hero-title {
+      font-size: 2.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #FFFFFF, var(--text-secondary));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      color: var(--text-muted);
+      font-size: 1rem;
+      line-height: 1.6;
+    }
+
+    .suggestions-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      width: 100%;
+      margin-top: 12px;
+    }
+
+    .suggestion-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      padding: 12px 18px;
+      border-radius: var(--radius-sm);
+      text-align: left;
+      font-size: 0.88rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .suggestion-card:hover {
+      border-color: var(--border-hover);
+      color: var(--text-primary);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    /* Input Area */
+    .chat-input-area {
+      padding: 20px 32px 28px;
+      background: linear-gradient(to top, var(--bg-primary) 80%, transparent);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .input-box {
+      background: var(--bg-card);
+      backdrop-filter: var(--glass-blur);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 8px 12px 8px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      transition: var(--transition);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .input-box:focus-within {
+      border-color: var(--accent-indigo);
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2), 0 8px 32px rgba(0, 0, 0, 0.5);
+    }
+
+    .input-box textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 0.96rem;
+      resize: none;
+      height: 28px;
+      max-height: 120px;
+      line-height: 28px;
+    }
+
+    .send-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-indigo));
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: var(--transition);
+      flex-shrink: 0;
+    }
+
+    .send-btn:hover:not(:disabled) {
+      transform: scale(1.06);
+      box-shadow: var(--glow-cyan);
+    }
+
+    .send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* Right Telemetry & Chunk Inspector Drawer */
+    .inspector-panel {
+      width: 420px;
+      background: var(--bg-secondary);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      transition: var(--transition);
+    }
+
+    .inspector-header {
+      height: 52px;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--border-color);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-secondary);
+    }
+
+    .inspector-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .section-title {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chunk-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .chunk-card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .chunk-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .chunk-source {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--accent-cyan);
+      background: rgba(6, 182, 212, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+
+    .chunk-score {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--accent-emerald);
+      font-weight: 700;
+    }
+
+    .chunk-text {
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .metric-card {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-color);
+      padding: 12px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .metric-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    /* Typing cursor */
+    .typing-cursor::after {
+      content: "▋";
+      display: inline-block;
+      vertical-align: middle;
+      color: var(--accent-cyan);
+      animation: blink 0.8s infinite;
+      margin-left: 2px;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0; }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      </div>
+      <div class="brand-title">Production RAG System</div>
+      <div class="brand-tag">v0.1.0-prod</div>
+    </div>
+
+    <div class="header-controls">
+      <div class="toggle-group" title="Hypothetical Document Embeddings for dense query expansion">
+        <span>HyDE</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="hydeToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-group" title="Embedding-based semantic similarity caching">
+        <span>Semantic Cache</span>
+        <label class="toggle-switch">
+          <input type="checkbox" id="cacheToggle" checked>
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="system-status">
+        <div class="status-pulse"></div>
+        <span id="statusIndicator">SYSTEM READY</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Workspace -->
+  <div class="workspace">
+    <!-- Chat Section -->
+    <section class="chat-section">
+      <div class="chat-messages" id="chatMessages">
+        <div class="hero-container" id="welcomeHero">
+          <h1 class="hero-title">Technical Documentation<br>Q&A Assistant</h1>
+          <p class="hero-subtitle">Ask questions across ingested technical documents. Powered by BGE-M3 hybrid retrieval, cross-encoder reranking, and Groq inference.</p>
+          
+          <div class="suggestions-grid">
+            <div class="suggestion-card" onclick="submitPrompt('What is a Python decorator?')">
+              <span>What is a Python decorator?</span>
+              <span>→</span>
+            </div>
+            <div class="suggestion-card" onclick="submitPrompt('How do I preserve function metadata when writing a decorator?')">
+              <span>How do I preserve function metadata with functools.wraps?</span>
+              <span>→</span>
+            </div>
+            <div class="suggestion-card" onclick="submitPrompt('What is the purpose of using a context manager in Python?')">
+              <span>How does contextlib.contextmanager simplify resource cleanup?</span>
+              <span>→</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="chat-input-area">
+        <div class="input-box">
+          <textarea id="queryInput" placeholder="Ask a question about the ingested documentation..." rows="1" onkeydown="handleKey(event)"></textarea>
+          <button class="send-btn" id="sendBtn" onclick="handleSend()" aria-label="Send query">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Inspector Panel -->
+    <aside class="inspector-panel" id="inspectorPanel">
+      <div class="inspector-header">
+        <span>Retrieval & Observability Telemetry</span>
+      </div>
+
+      <div class="inspector-body">
+        <div>
+          <div class="section-title">Query Performance</div>
+          <div class="telemetry-grid">
+            <div class="metric-card">
+              <span class="metric-label">Latency</span>
+              <span class="metric-val" id="metricLatency">-- ms</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Cache Status</span>
+              <span class="metric-val" id="metricCache">MISS</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Provider</span>
+              <span class="metric-val" id="metricProvider">--</span>
+            </div>
+            <div class="metric-card">
+              <span class="metric-label">Context Chunks</span>
+              <span class="metric-val" id="metricChunks">0</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">
+            <span>Retrieved Chunks (Top Reranked)</span>
+          </div>
+          <div id="chunksContainer" style="display: flex; flex-direction: column; gap: 10px;">
+            <p style="color: var(--text-muted); font-size: 0.82rem;">Submit a query to inspect reranked context chunks.</p>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">Distributed Trace</div>
+          <div class="metric-card" style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; word-break: break-all;">
+            <span class="metric-label">Trace ID</span>
+            <span id="metricTraceId" style="color: var(--accent-indigo); margin-top: 4px;">none</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <script>
+    const chatMessages = document.getElementById('chatMessages');
+    const queryInput = document.getElementById('queryInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const welcomeHero = document.getElementById('welcomeHero');
+    const hydeToggle = document.getElementById('hydeToggle');
+    const cacheToggle = document.getElementById('cacheToggle');
+
+    const metricLatency = document.getElementById('metricLatency');
+    const metricCache = document.getElementById('metricCache');
+    const metricProvider = document.getElementById('metricProvider');
+    const metricChunks = document.getElementById('metricChunks');
+    const metricTraceId = document.getElementById('metricTraceId');
+    const chunksContainer = document.getElementById('chunksContainer');
+
+    function handleKey(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSend();
+      }
+    }
+
+    function submitPrompt(text) {
+      queryInput.value = text;
+      handleSend();
+    }
+
+    async function handleSend() {
+      const query = queryInput.value.trim();
+      if (!query) return;
+
+      if (welcomeHero) welcomeHero.remove();
+
+      // Append User message
+      appendMessage('user', query);
+      queryInput.value = '';
+      sendBtn.disabled = true;
+
+      // Create Assistant bubble with typing cursor
+      const assistantMsg = appendMessage('assistant', '', true);
+      const bubble = assistantMsg.querySelector('.message-bubble');
+
+      const startTime = performance.now();
+
+      try {
+        const response = await fetch('/api/v1/query/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            query: query,
+            use_cache: cacheToggle.checked,
+            use_hyde: hydeToggle.checked,
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let fullAnswer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop(); // keep last incomplete line
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'token') {
+                fullAnswer += data.content;
+                bubble.textContent = fullAnswer;
+              } else if (data.type === 'sources') {
+                renderSources(data.sources);
+                metricChunks.textContent = data.sources.length;
+              } else if (data.type === 'done') {
+                bubble.classList.remove('typing-cursor');
+                const elapsed = data.latency_ms || Math.round(performance.now() - startTime);
+                metricLatency.textContent = `${elapsed} ms`;
+                metricCache.textContent = data.cached ? 'HIT' : 'MISS';
+                metricCache.style.color = data.cached ? 'var(--accent-emerald)' : 'var(--text-primary)';
+                metricProvider.textContent = data.provider || 'Groq';
+                metricTraceId.textContent = data.trace_id || 'trace-active';
+
+                appendMetaTag(assistantMsg, `${elapsed} ms`);
+                appendMetaTag(assistantMsg, data.cached ? '⚡ Cached' : 'LLM Generated', data.cached);
+              } else if (data.type === 'error') {
+                bubble.textContent = `Error: ${data.detail}`;
+                bubble.classList.remove('typing-cursor');
+              }
+            }
+          }
+        }
+
+      } catch (err) {
+        bubble.textContent = `Request failed: ${err.message}`;
+        bubble.classList.remove('typing-cursor');
+      } finally {
+        sendBtn.disabled = false;
+        queryInput.focus();
+      }
+    }
+
+    function appendMessage(role, text, isStreaming = false) {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `message ${role}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = 'message-bubble' + (isStreaming ? ' typing-cursor' : '');
+      bubble.textContent = text;
+      msgDiv.appendChild(bubble);
+
+      const metaDiv = document.createElement('div');
+      metaDiv.className = 'message-meta';
+      msgDiv.appendChild(metaDiv);
+
+      chatMessages.appendChild(msgDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+      return msgDiv;
+    }
+
+    function appendMetaTag(msgElement, text, isCache = false) {
+      const metaDiv = msgElement.querySelector('.message-meta');
+      const tag = document.createElement('span');
+      tag.className = 'meta-tag' + (isCache ? ' cache-hit' : '');
+      tag.textContent = text;
+      metaDiv.appendChild(tag);
+    }
+
+    function renderSources(sources) {
+      chunksContainer.innerHTML = '';
+      if (!sources || sources.length === 0) {
+        chunksContainer.innerHTML = '<p style="color: var(--text-muted); font-size: 0.82rem;">No chunks retrieved.</p>';
+        return;
+      }
+
+      sources.forEach((s, idx) => {
+        const card = document.createElement('div');
+        card.className = 'chunk-card';
+        card.innerHTML = `
+          <div class="chunk-header">
+            <span class="chunk-source">#${idx + 1} ${s.source_file}</span>
+            <span class="chunk-score">${s.reranker_score ? s.reranker_score.toFixed(3) : 'Reranked'}</span>
+          </div>
+          <div class="chunk-text">${s.text_preview}...</div>
+        `;
+        chunksContainer.appendChild(card);
+      });
+    }
+  </script>
+</body>
+</html>

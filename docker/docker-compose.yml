@@ -1,0 +1,138 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose — Full Development + Production Stack
+#
+# CONCEPT: Docker Compose defines a multi-container application. Each service
+# runs in its own container, isolated on a shared virtual network. Services
+# communicate by container name (e.g., http://qdrant:6333).
+#
+# Usage:
+#   docker compose up -d               # Start all services in background
+#   docker compose logs -f rag-api     # Follow logs for the API
+#   docker compose down -v             # Stop and delete volumes (clean slate)
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Qdrant Vector Database ────────────────────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.12.0    # pin version — never use :latest in prod
+    container_name: rag-qdrant
+    ports:
+      - "6333:6333"    # REST API
+      - "6334:6334"    # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage   # persist vectors across restarts
+    environment:
+      QDRANT__SERVICE__GRPC_PORT: 6334
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  # ── Redis Cache ───────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.4-alpine          # Alpine = minimal image, ~40MB vs ~150MB
+    container_name: rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    # --appendonly yes: persist cache to disk (survives restarts)
+    # --maxmemory-policy allkeys-lru: evict least-recently-used keys when full
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  # ── Langfuse Postgres Backend ──────────────────────────────────────────────
+  # Langfuse stores traces, evaluations, and prompts in Postgres
+  langfuse-postgres:
+    image: postgres:16-alpine
+    container_name: rag-langfuse-db
+    environment:
+      POSTGRES_DB: langfuse
+      POSTGRES_USER: langfuse
+      POSTGRES_PASSWORD: ${LANGFUSE_DB_PASSWORD:-langfuse_dev_password}
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U langfuse"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  # ── Langfuse Observability Platform ───────────────────────────────────────
+  langfuse:
+    image: langfuse/langfuse:2
+    container_name: rag-langfuse
+    depends_on:
+      langfuse-postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://langfuse:${LANGFUSE_DB_PASSWORD:-langfuse_dev_password}@langfuse-postgres:5432/langfuse
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-dev-secret-change-in-production}
+      SALT: ${LANGFUSE_SALT:-dev-salt-change-in-production}
+      NEXTAUTH_URL: http://localhost:3000
+      TELEMETRY_ENABLED: "false"    # opt out of usage analytics
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+  # ── RAG API ───────────────────────────────────────────────────────────────
+  rag-api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: rag-api
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../.env                      # load all env vars from .env file
+    environment:
+      # Override service URLs to use container names on the Docker network
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379
+      LANGFUSE_HOST: http://langfuse:3000
+    volumes:
+      # Mount source code for development hot-reload (remove for production)
+      - ../src:/app/src
+      # Persist downloaded model weights across restarts
+      - model_cache:/app/.cache
+    restart: unless-stopped
+    networks:
+      - rag-network
+
+# ── Named Volumes ─────────────────────────────────────────────────────────────
+# Named volumes persist data across `docker compose down` (without -v flag)
+volumes:
+  qdrant_storage:
+  redis_data:
+  langfuse_postgres_data:
+  model_cache:
+
+# ── Network ───────────────────────────────────────────────────────────────────
+# Services communicate on this isolated bridge network
+# No service is reachable from outside Docker unless a port is published
+networks:
+  rag-network:
+    driver: bridge

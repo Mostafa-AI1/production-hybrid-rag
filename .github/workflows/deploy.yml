@@ -1,0 +1,101 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Deploy Pipeline — triggers on merge to main after CI passes
+#
+# CONCEPT: Continuous Deployment (CD) means every passing merge to main is
+# automatically deployed to production. This removes the manual deployment
+# step and makes releases fast, frequent, and low-risk (because each change
+# is small and tested).
+#
+# Strategy: Build → Push to registry → Deploy
+#
+# CURRENT TARGET: Docker image push to GitHub Container Registry (GHCR).
+# GHCR is free for public repos. The deploy step is a webhook to Render.com
+# (free tier). You can swap the deploy step for SSH + docker pull or any other
+# mechanism without changing the build step.
+#
+# SECRETS REQUIRED (set in GitHub repo Settings → Secrets → Actions):
+#   RENDER_DEPLOY_HOOK_URL: The deploy hook URL from your Render service
+#
+# HOW TO GET THE RENDER DEPLOY HOOK:
+#   1. Create a new Web Service on render.com
+#   2. Settings → Deploy Hook → Copy the URL
+#   3. Add as GitHub secret RENDER_DEPLOY_HOOK_URL
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]   # only deploy from main branch
+
+# Prevent concurrent deployments — if a deploy is running and another commit
+# lands, wait for the current deploy to finish rather than starting a second one.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+
+  # ── Build and Push Docker Image to GHCR ──────────────────────────────────────
+  build-and-push:
+    name: Build & Push Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write    # needed to push to GHCR
+
+    outputs:
+      image-tag: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          # GITHUB_TOKEN is automatically provided — no manual secret needed
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,prefix=sha-            # e.g., sha-abc1234 (immutable, for rollbacks)
+            type=raw,value=latest           # :latest points to current main
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Deploy to Render ──────────────────────────────────────────────────────────
+  deploy-render:
+    name: Deploy to Render
+    runs-on: ubuntu-latest
+    needs: build-and-push    # only run after image is pushed
+    environment: production  # requires manual approval in GitHub (configurable)
+
+    steps:
+      - name: Trigger Render deploy hook
+        # Render watches GHCR and pulls the new image when we hit the deploy hook
+        run: |
+          curl --fail-with-body \
+            -X POST \
+            "${{ secrets.RENDER_DEPLOY_HOOK_URL }}"
+        # --fail-with-body: exit non-zero if HTTP status >= 400 (surfaces errors in CI)
+
+      - name: Notify deployment complete
+        run: echo "✅ Deployed to production at $(date -u)"
