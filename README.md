@@ -4,6 +4,10 @@ A high-throughput, observable Retrieval-Augmented Generation (RAG) service desig
 
 The system combines dense vector search (BGE-M3) with sparse lexical retrieval (BM25), reciprocal rank fusion (RRF), cross-encoder reranking, multi-tier semantic caching, and full execution tracing via Langfuse.
 
+<p align="center">
+  <img src="docs/assets/rag_studio_ui.png" alt="Production RAG Studio UI" width="100%">
+</p>
+
 ---
 
 ## Architecture Overview
@@ -102,6 +106,10 @@ The system combines dense vector search (BGE-M3) with sparse lexical retrieval (
 - **Distributed Tracing**: Langfuse instrumentation tracks latency, token usage, and retrieval scoring across every span (`dense_retrieve`, `bm25_retrieve`, `hybrid_fusion`, `rerank`, `llm_generate`).
 - **CI Quality Gates**: DeepEval test suite evaluating Faithfulness, Answer Relevancy, and Contextual Precision against an automated golden dataset.
 - **Macro-Benchmark Runner**: Standalone evaluation script (`scripts/evaluate_ragas.py`) compiling statistical Markdown benchmark reports.
+
+### 8. Interactive Studio UI
+- Built-in, zero-dependency dark-mode interface served directly by FastAPI at `/` and `/ui`.
+- Features real-time Server-Sent Events (SSE) token delta rendering, an interactive retrieved-chunk inspector with reranker score bars, runtime toggles for HyDE and Semantic Caching, and live latency telemetry cards.
 
 ---
 
